@@ -152,8 +152,7 @@ namespace TS3AudioBot.Audio
 						return DoRetry(instance, actualStopPosition);
 				}
 				} else {
-					Log.Trace("Process exited and didn't print a song length");
-					return DoRetry(instance, TimeSpan.Zero);
+					Log.Trace("Process exited and didn't print a song length (check for error)");
 			}
 			} else {
 				Log.Trace("Read empty, continuing to read from same process");
