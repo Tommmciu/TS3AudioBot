@@ -140,6 +140,10 @@ namespace TS3AudioBot.Audio
 			{
 				var expectedStopLength = GetCurrentSongLength();
 				Log.Trace("Expected song length {0}", expectedStopLength);
+				if(instance.Error.HasValue)
+					Log.Error(instance.Error);
+				else
+					Log.Error("Error output: {0}", instance.CurrentErrorOutput);
 				if (expectedStopLength.HasValue)
 				{
 					var actualStopPosition = instance.AudioTimer.SongPosition;
@@ -151,6 +155,8 @@ namespace TS3AudioBot.Audio
 					Log.Trace("Process exited and didn't print a song length");
 					return DoRetry(instance, TimeSpan.Zero);
 			}
+			} else {
+				Log.Trace("Read empty, continuing to read from same process");
 			}
 			return (false, false);
 		}
@@ -332,16 +338,27 @@ namespace TS3AudioBot.Audio
 		private class FfmpegInstance
 		{
 			public Process FfmpegProcess { get; set; }
-			public bool HasTriedToReconnect { get; set; }
+			public bool HasTriedToReconnect { get; set; } = false;
+
+			public enum ErrorCause {
+				Unknown,
+				SessionInvalidated
+			}
+
+			public ErrorCause? Error { get; private set; }
+
 			public string ReconnectUrl { get; }
 			public bool IsIcyStream { get; }
 
 			public PreciseAudioTimer AudioTimer { get; }
-			public TimeSpan? ParsedSongLength { get; set; } = null;
+			public TimeSpan? ParsedSongLength { get; private set; }
 
 			public Stream IcyStream { get; set; }
 			public int IcyMetaInt { get; set; }
 			public bool Closed { get; set; }
+
+			private readonly StringBuilder currentErrorOutputBuilder = new StringBuilder();
+			public string CurrentErrorOutput => currentErrorOutputBuilder.ToString();
 
 			public Action<SongInfoChanged> OnMetaUpdated;
 
@@ -350,8 +367,6 @@ namespace TS3AudioBot.Audio
 				ReconnectUrl = url;
 				AudioTimer = timer;
 				IsIcyStream = isIcyStream;
-
-				HasTriedToReconnect = false;
 			}
 
 			public void Close()
@@ -379,6 +394,13 @@ namespace TS3AudioBot.Audio
 
 				if (sender != FfmpegProcess)
 					throw new InvalidOperationException("Wrong process associated to event");
+
+				currentErrorOutputBuilder.AppendLine(e.Data);
+
+				if (!Error.HasValue) {
+					if(e.Data.Contains("The specified session has been invalidated for some reason"))
+						Error = ErrorCause.SessionInvalidated;
+				}
 
 				if (!ParsedSongLength.HasValue)
 				{
